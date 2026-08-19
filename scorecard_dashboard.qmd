@@ -1,0 +1,567 @@
+---
+title: "Scorecard Feedback Dashboard"
+subtitle: "Open-text survey analysis"
+format:
+  dashboard:
+    theme: cosmo
+    css: styles.css
+    orientation: rows
+    scrolling: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+library(tidyverse)
+library(readxl)
+library(tidytext)
+library(plotly)
+library(DT)
+library(scales)
+
+theme_set(theme_minimal(base_size = 13) +
+  theme(panel.grid.minor = element_blank(), plot.title = element_text(face = "bold")))
+
+teal <- "#0F766E"
+navy <- "#183153"
+amber <- "#D97706"
+red <- "#B91C1C"
+gray <- "#64748B"
+
+file_path <- "data/synthetic_scorecard_survey_responses.xlsx"
+survey <- read_excel(file_path, sheet = "Scorecard Responses")
+
+question_map <- c(
+  overall = "What were your overall thoughts on the scorecard?",
+  liked = "What, if anything, did you like most about it?",
+  unclear = "What, if anything, was problematic or unclear?",
+  results = "What did you think of the output/results of the scorecard?",
+  guide = "Do you have any feedback on the step-by-step guide?",
+  other = "Is there any other feedback you would like to provide after using the scorecard?"
+)
+
+survey_long <- survey |>
+  select(respondent_id, department, all_of(unname(question_map))) |>
+  pivot_longer(all_of(unname(question_map)), names_to = "question_text", values_to = "response") |>
+  mutate(
+    question = names(question_map)[match(question_text, unname(question_map))],
+    question = factor(question, levels = names(question_map)),
+    response = str_squish(response)
+  ) |>
+  filter(!is.na(response), response != "")
+
+theme_rules <- tribble(
+  ~theme, ~pattern,
+  "Clear and useful", "\\bclear\\b|useful|\\beasy\\b|helpful|practical|straightforward|structured",
+  "Scoring needs explanation", "\\bscore\\b|\\bscoring\\b|criteria|rating|borderline|calculation",
+  "Too long or repetitive", "long|time|repetitive|repeated|shorter|too many",
+  "Technical language", "technical|terminology|jargon|plain.language|glossary|provenance|metadata",
+  "Needs recommendations", "recommend|next step|action|remediation|resource|what action",
+  "Navigation and saving", "navigation|click|save|progress|screen|move between",
+  "Collaboration and roles", "team|role|collaborat|data owner|project manager",
+  "Result validity", "confiden|valid|missing answer|not.applicable|completeness|uncertainty"
+)
+
+theme_hits <- survey_long |>
+  crossing(theme_rules) |>
+  mutate(hit = str_detect(str_to_lower(response), pattern)) |>
+  filter(hit) |>
+  distinct(respondent_id, department, question, response, theme)
+
+bing <- get_sentiments("bing")
+sentiment <- survey_long |>
+  unnest_tokens(word, response) |>
+  inner_join(bing, by = "word") |>
+  count(respondent_id, department, question, sentiment) |>
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) |>
+  mutate(
+    score = positive - negative,
+    sentiment_group = case_when(score > 0 ~ "Positive", score < 0 ~ "Negative", TRUE ~ "Mixed/neutral")
+  )
+
+sentiment_complete <- survey_long |>
+  distinct(respondent_id, department, question) |>
+  left_join(sentiment, by = c("respondent_id", "department", "question")) |>
+  mutate(sentiment_group = replace_na(sentiment_group, "Mixed/neutral"))
+
+words <- survey_long |>
+  unnest_tokens(word, response) |>
+  anti_join(stop_words, by = "word") |>
+  filter(str_length(word) > 2, !word %in% c("scorecard", "dataset", "guide", "result", "results"))
+
+bigrams <- survey_long |>
+  unnest_tokens(bigram, response, token = "ngrams", n = 2) |>
+  separate(bigram, c("word1", "word2"), sep = " ", remove = FALSE) |>
+  filter(!word1 %in% stop_words$word, !word2 %in% stop_words$word) |>
+  count(question, bigram, sort = TRUE)
+
+completion_rate <- survey_long |>
+  distinct(respondent_id, question) |>
+  nrow() / (n_distinct(survey$respondent_id) * length(question_map))
+
+plotly_bar <- function(data, x, y, title, color = teal) {
+  ggplotly(
+    ggplot(data, aes(x = {{x}}, y = reorder({{y}}, {{x}}))) +
+      geom_col(fill = color, width = .7) +
+      labs(x = NULL, y = NULL, title = title) +
+      scale_x_continuous(expand = expansion(mult = c(0, .08))),
+    tooltip = c("x", "y")
+  ) |> config(displayModeBar = FALSE)
+}
+
+# Leadership-level derived measures
+theme_metadata <- tribble(
+  ~theme, ~type, ~impact, ~decision,
+  "Clear and useful", "Strength", 2, "Retain the clear structure and practical assessment flow.",
+  "Scoring needs explanation", "Concern", 5, "Clarify scoring criteria and add worked examples.",
+  "Too long or repetitive", "Concern", 3, "Combine overlapping items and offer a shorter screening version.",
+  "Technical language", "Concern", 4, "Add plain-language definitions and a glossary.",
+  "Needs recommendations", "Concern", 5, "Connect low scores with recommended next steps.",
+  "Navigation and saving", "Concern", 3, "Add progress, save confirmation, and question links.",
+  "Collaboration and roles", "Strength", 3, "Retain team use and clarify responsibility by section.",
+  "Result validity", "Concern", 5, "Explain calculations and show completeness or confidence."
+)
+
+theme_leadership <- theme_hits |>
+  distinct(respondent_id, theme) |>
+  count(theme, name = "respondents") |>
+  mutate(percentage = respondents / n_distinct(survey$respondent_id)) |>
+  right_join(theme_metadata, by = "theme") |>
+  mutate(respondents = replace_na(respondents, 0L), percentage = replace_na(percentage, 0))
+
+top_strengths <- theme_leadership |> filter(type == "Strength") |> arrange(desc(percentage)) |> slice_head(n = 3)
+top_concerns <- theme_leadership |> filter(type == "Concern") |> arrange(desc(percentage), desc(impact)) |> slice_head(n = 3)
+
+priority_data <- theme_leadership |>
+  filter(type == "Concern") |>
+  mutate(priority = case_when(
+    impact >= 4 & percentage >= median(percentage) ~ "Immediate",
+    impact >= 4 ~ "Strategic",
+    percentage >= median(percentage) ~ "Quick win",
+    TRUE ~ "Monitor"
+  ))
+
+question_sentiment <- sentiment_complete |>
+  count(question, sentiment_group) |>
+  group_by(question) |>
+  mutate(percentage = n / sum(n)) |>
+  ungroup()
+
+actionability <- survey_long |>
+  filter(question == "results") |>
+  mutate(category = case_when(
+    str_detect(str_to_lower(response), "next step|recommend|action|remediation|did not provide|not provide enough") ~ "Understood, but needs next steps",
+    str_detect(str_to_lower(response), "unclear|confus|difficult|not confident|uncertain") ~ "Difficult to interpret",
+    str_detect(str_to_lower(response), "useful|informative|clear|easy to see|worked well") ~ "Understandable and useful",
+    TRUE ~ "No clear actionability signal"
+  )) |>
+  count(category) |>
+  mutate(percentage = n / sum(n))
+
+readiness_indicators <- tribble(
+  ~indicator, ~pattern,
+  "Perceived usefulness", "useful|valuable|helpful|practical",
+  "Ease of use", "clear|easy|straightforward|simple to use",
+  "Result confidence", "confident|accurate|valid|reflected",
+  "Actionability", "next step|recommend|action|remediation",
+  "Team usefulness", "team|collaborat|discussion|data owner|project manager"
+) |>
+  rowwise() |>
+  mutate(
+    respondents = n_distinct(survey_long$respondent_id[str_detect(str_to_lower(survey_long$response), pattern)]),
+    percentage = respondents / n_distinct(survey$respondent_id)
+  ) |>
+  ungroup() |>
+  select(-pattern) |>
+  bind_rows(tibble(indicator = "Intention to reuse/recommend", respondents = NA_integer_, percentage = NA_real_))
+
+polarization <- sentiment_complete |>
+  count(department, sentiment_group) |>
+  group_by(department) |>
+  mutate(percentage = n / sum(n)) |>
+  ungroup() |>
+  select(department, sentiment_group, percentage) |>
+  pivot_wider(names_from = sentiment_group, values_from = percentage, values_fill = 0) |>
+  mutate(
+    spread = abs(Positive - Negative),
+    interpretation = case_when(
+      Positive >= .60 ~ "Broadly positive",
+      Negative >= .60 ~ "Broadly negative",
+      spread <= .15 ~ "Polarized or mixed",
+      Positive > Negative ~ "Leans positive",
+      TRUE ~ "Leans negative"
+    )
+  )
+
+representative_quotes <- theme_hits |>
+  semi_join(bind_rows(top_strengths, top_concerns), by = "theme") |>
+  group_by(theme) |>
+  slice_max(order_by = str_length(response), n = 1, with_ties = FALSE) |>
+  ungroup() |>
+  transmute(theme, department, quotation = paste0("“", response, "”"))
+
+decision_table <- priority_data |>
+  arrange(desc(priority == "Immediate"), desc(impact), desc(percentage)) |>
+  transmute(
+    Priority = priority,
+    Finding = theme,
+    Evidence = paste0(percent(percentage, accuracy = 1), " of respondents mentioned this theme"),
+    `Recommended decision` = decision,
+    Timing = case_when(priority == "Immediate" ~ "Immediate", priority == "Strategic" ~ "Next release", TRUE ~ "Future enhancement")
+  )
+
+sentiment_stats <- sentiment_complete |>
+  count(sentiment_group) |>
+  mutate(percentage = n / sum(n))
+safe_sentiment <- function(label) {
+  value <- sentiment_stats |> filter(sentiment_group == label) |> pull(percentage)
+  if (length(value) == 0) 0 else value[[1]]
+}
+
+positive_pct <- safe_sentiment("Positive")
+negative_pct <- safe_sentiment("Negative")
+top_strength_text <- paste(top_strengths$theme, collapse = ", ")
+top_concern_text <- paste(top_concerns$theme, collapse = ", ")
+action_text <- paste(top_concerns$decision, collapse = " ")
+
+executive_summary <- c(
+  paste0(
+    "Overall, ", percent(positive_pct, accuracy = 1),
+    " of analyzed comments contained more positive than negative language, while ",
+    percent(negative_pct, accuracy = 1),
+    " contained more negative language. These percentages are directional indicators because one comment can contain both praise and criticism."
+  ),
+  paste0(
+    "The strongest recurring aspects were ", top_strength_text,
+    ". The leading concerns were ", top_concern_text,
+    ". This indicates that the scorecard has a useful foundation, but clarity, usability, and confidence in the results may affect consistent adoption."
+  ),
+  paste0(
+    "Leadership should focus first on the high-frequency, high-impact concerns and review whether experiences differ materially across departments. ",
+    action_text
+  ),
+  paste0(
+    "The findings are based on transparent keyword and sentiment rules rather than a generative model. They should be confirmed through a small review of representative comments before final decisions are made."
+  )
+)
+```
+
+# Overview
+
+## Row {height=18%}
+
+```{r}
+htmltools::div(
+  class = "kpi-grid",
+  htmltools::div(class = "kpi-card kpi-teal", htmltools::span(class = "kpi-label", "Respondents"), htmltools::strong(n_distinct(survey$respondent_id)), htmltools::small("People represented")),
+  htmltools::div(class = "kpi-card kpi-navy", htmltools::span(class = "kpi-label", "Departments"), htmltools::strong(n_distinct(survey$department)), htmltools::small("Organizational perspectives")),
+  htmltools::div(class = "kpi-card kpi-blue", htmltools::span(class = "kpi-label", "Open-text responses"), htmltools::strong(comma(nrow(survey_long))), htmltools::small("Comments analyzed")),
+  htmltools::div(class = "kpi-card kpi-gold", htmltools::span(class = "kpi-label", "Completion"), htmltools::strong(percent(completion_rate, accuracy = 1)), htmltools::small("Questions answered"))
+)
+```
+
+## Row {height=42%}
+
+### Executive summary
+
+```{r}
+htmltools::div(
+  class = "executive-summary executive-summary-compact",
+  lapply(executive_summary[1:3], function(paragraph) htmltools::p(paragraph))
+)
+```
+
+### Leading strengths and concerns
+
+```{r}
+leadership_finding <- function(label, value, kind) {
+  htmltools::div(
+    class = paste("finding-item", kind),
+    htmltools::span(class = "finding-label", label),
+    htmltools::strong(percent(value, accuracy = 1))
+  )
+}
+
+htmltools::div(
+  class = "findings-panel",
+  htmltools::h4("Strengths"),
+  lapply(seq_len(nrow(top_strengths)), function(i) leadership_finding(top_strengths$theme[i], top_strengths$percentage[i], "strength")),
+  htmltools::h4("Concerns"),
+  lapply(seq_len(nrow(top_concerns)), function(i) leadership_finding(top_concerns$theme[i], top_concerns$percentage[i], "concern"))
+)
+```
+
+## Row {height=40%}
+
+### Recommended decisions
+
+```{r}
+overview_decisions <- decision_table |> slice_head(n = 4)
+htmltools::div(
+  class = "decision-list",
+  lapply(seq_len(nrow(overview_decisions)), function(i) {
+    htmltools::div(
+      class = "decision-item",
+      htmltools::span(class = paste("priority-badge", tolower(overview_decisions$Priority[i])), overview_decisions$Priority[i]),
+      htmltools::div(htmltools::strong(overview_decisions$Finding[i]), htmltools::p(overview_decisions$`Recommended decision`[i]))
+    )
+  })
+)
+```
+
+### Representative comments
+
+```{r}
+overview_quotes <- representative_quotes |> slice_head(n = 3)
+htmltools::div(
+  class = "quote-list",
+  lapply(seq_len(nrow(overview_quotes)), function(i) {
+    htmltools::blockquote(
+      overview_quotes$quotation[i],
+      htmltools::footer(paste(overview_quotes$theme[i], "•", overview_quotes$department[i]))
+    )
+  })
+)
+```
+
+# Priorities
+
+## Row
+
+### 1. Executive sentiment summary
+
+```{r}
+sentiment_executive <- sentiment_stats |>
+  mutate(sentiment_group = factor(sentiment_group, levels = c("Positive", "Mixed/neutral", "Negative")))
+
+ggplotly(
+  ggplot(sentiment_executive, aes(sentiment_group, percentage, fill = sentiment_group,
+                                  text = paste0(percent(percentage, accuracy = 1), " of comments"))) +
+    geom_col(width = .65) +
+    scale_fill_manual(values = c("Positive" = teal, "Mixed/neutral" = amber, "Negative" = red)) +
+    scale_y_continuous(labels = percent) +
+    labs(x = NULL, y = NULL, title = "Overall experience indicator") +
+    theme(legend.position = "none"),
+  tooltip = "text"
+) |> config(displayModeBar = FALSE)
+```
+
+### 2. Top strengths and concerns
+
+```{r}
+strength_concern_table <- bind_rows(top_strengths, top_concerns) |>
+  transmute(Type = type, Finding = theme, Respondents = respondents, Percentage = percentage)
+
+datatable(
+  strength_concern_table,
+  rownames = FALSE,
+  options = list(dom = "t", autoWidth = TRUE)
+) |>
+  formatPercentage("Percentage", 0)
+```
+
+## Row
+
+### 3. Leadership priority matrix
+
+```{r}
+ggplotly(
+  ggplot(priority_data, aes(percentage, impact, color = priority,
+                            text = paste0(theme, "<br>Frequency: ", percent(percentage, accuracy = 1),
+                                          "<br>Impact: ", impact, "/5<br>Priority: ", priority))) +
+    geom_point(size = 5, alpha = .9) +
+    geom_text(aes(label = theme), nudge_y = .12, size = 3, show.legend = FALSE) +
+    scale_x_continuous(labels = percent, limits = c(0, max(priority_data$percentage) * 1.15)) +
+    scale_y_continuous(breaks = 1:5, limits = c(1, 5.4)) +
+    scale_color_manual(values = c("Immediate" = red, "Strategic" = amber, "Quick win" = teal, "Monitor" = gray)) +
+    labs(x = "Percentage of respondents", y = "Business impact", color = "Priority",
+         title = "Frequency and impact of concerns"),
+  tooltip = "text"
+) |> config(displayModeBar = FALSE)
+```
+
+### 4. Department comparison
+
+```{r}
+department_leadership <- theme_hits |>
+  filter(theme %in% top_concerns$theme) |>
+  distinct(department, respondent_id, theme) |>
+  count(department, theme) |>
+  group_by(department) |>
+  mutate(percentage = n / n_distinct(survey$respondent_id[survey$department == first(department)])) |>
+  ungroup()
+
+ggplotly(
+  ggplot(department_leadership, aes(department, theme, fill = percentage,
+                                    text = paste0(percent(percentage, accuracy = 1), " of department respondents"))) +
+    geom_tile(color = "white", linewidth = 1) +
+    scale_fill_gradient(low = "#EFF6FF", high = navy, labels = percent) +
+    labs(x = NULL, y = NULL, fill = "Percentage", title = "Leading concerns by department") +
+    theme(axis.text.x = element_text(angle = 30, hjust = 1)),
+  tooltip = "text"
+) |> config(displayModeBar = FALSE)
+```
+
+# Performance
+
+## Row
+
+### 5. Question-level performance
+
+```{r}
+ggplotly(
+  ggplot(question_sentiment, aes(question, percentage, fill = sentiment_group,
+                                 text = paste0(sentiment_group, ": ", percent(percentage, accuracy = 1)))) +
+    geom_col(position = "fill") +
+    scale_fill_manual(values = c("Positive" = teal, "Mixed/neutral" = amber, "Negative" = red)) +
+    scale_y_continuous(labels = percent) +
+    labs(x = "Question", y = NULL, fill = "Sentiment", title = "Sentiment by scorecard component"),
+  tooltip = "text"
+) |> config(displayModeBar = FALSE)
+```
+
+### 6. Actionability of the output
+
+```{r}
+plotly_bar(actionability, percentage, category, "Can users act on the scorecard results?", teal) |>
+  layout(xaxis = list(tickformat = ".0%"))
+```
+
+## Row
+
+### 7. Adoption and readiness indicators
+
+```{r}
+readiness_display <- readiness_indicators |>
+  mutate(
+    Result = if_else(is.na(percentage), "Not directly measured", percent(percentage, accuracy = 1)),
+    Note = if_else(is.na(percentage), "Add a direct survey question in the next round", "Text-based proxy")
+  ) |>
+  select(Indicator = indicator, Result, Note)
+
+datatable(readiness_display, rownames = FALSE, options = list(dom = "t", autoWidth = TRUE))
+```
+
+### 8. Agreement versus polarization
+
+```{r}
+polarization_display <- polarization |>
+  transmute(
+    Department = department,
+    Positive = Positive,
+    Negative = Negative,
+    Interpretation = interpretation
+  )
+
+datatable(polarization_display, rownames = FALSE, options = list(dom = "t", autoWidth = TRUE)) |>
+  formatPercentage(c("Positive", "Negative"), 0)
+```
+
+# Decisions
+
+## Row
+
+### 9. Representative comments
+
+```{r}
+datatable(
+  representative_quotes,
+  rownames = FALSE,
+  escape = TRUE,
+  options = list(pageLength = 8, dom = "tip", autoWidth = TRUE),
+  colnames = c("Theme", "Department", "Anonymized quotation")
+)
+```
+
+### 10. Recommended decisions
+
+```{r}
+datatable(
+  decision_table,
+  rownames = FALSE,
+  options = list(pageLength = 8, dom = "tip", autoWidth = TRUE)
+)
+```
+
+# Themes
+
+## Row
+
+### Themes by survey question
+
+```{r}
+theme_question <- theme_hits |>
+  count(question, theme) |>
+  mutate(question = factor(question, levels = names(question_map)))
+
+ggplotly(
+  ggplot(theme_question, aes(question, theme, fill = n, text = paste("Mentions:", n))) +
+    geom_tile(color = "white", linewidth = 1) +
+    scale_fill_gradient(low = "#E6FFFB", high = teal) +
+    labs(x = "Question", y = NULL, fill = "Mentions", title = "Theme heat map"),
+  tooltip = "text"
+) |> config(displayModeBar = FALSE)
+```
+
+### Themes by department
+
+```{r}
+theme_department <- theme_hits |> count(department, theme)
+ggplotly(
+  ggplot(theme_department, aes(department, theme, fill = n, text = paste("Mentions:", n))) +
+    geom_tile(color = "white", linewidth = 1) +
+    scale_fill_gradient(low = "#EFF6FF", high = navy) +
+    labs(x = NULL, y = NULL, fill = "Mentions", title = "Department comparison") +
+    theme(axis.text.x = element_text(angle = 30, hjust = 1)),
+  tooltip = "text"
+) |> config(displayModeBar = FALSE)
+```
+
+# Language
+
+## Row
+
+### Frequent words
+
+```{r}
+word_summary <- words |> count(word, sort = TRUE) |> slice_head(n = 20)
+plotly_bar(word_summary, n, word, "Top words", navy)
+```
+
+### Frequent phrases
+
+```{r}
+bigram_summary <- bigrams |> group_by(question) |> slice_max(n, n = 5, with_ties = FALSE) |> ungroup()
+datatable(
+  bigram_summary,
+  rownames = FALSE,
+  filter = "top",
+  options = list(pageLength = 12, dom = "tip", autoWidth = TRUE),
+  colnames = c("Question", "Two-word phrase", "Count")
+)
+```
+
+# Comments
+
+## Row
+
+### Searchable response table
+
+```{r}
+comment_table <- survey_long |>
+  mutate(question = as.character(question)) |>
+  select(respondent_id, department, question, response)
+
+datatable(
+  comment_table,
+  rownames = FALSE,
+  filter = "top",
+  escape = TRUE,
+  options = list(pageLength = 15, scrollX = TRUE, autoWidth = TRUE),
+  colnames = c("Respondent", "Department", "Question", "Response")
+)
+```
