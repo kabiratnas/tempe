@@ -1,3 +1,54 @@
+ggplotly(
+  ggplot(
+    priority_data,
+    aes(
+      x = percentage,
+      y = impact,
+      color = priority,
+      text = paste0(
+        "<b>", theme, "</b>",
+        "<br>Frequency: ", percent(percentage, accuracy = 1),
+        "<br>Impact: ", impact, "/5",
+        "<br>Priority: ", priority
+      )
+    )
+  ) +
+    geom_point(size = 7, alpha = 0.85) +
+    scale_x_continuous(
+      labels = percent,
+      limits = c(
+        0,
+        max(priority_data$percentage, na.rm = TRUE) * 1.15
+      ),
+      expand = expansion(mult = c(0.03, 0.08))
+    ) +
+    scale_y_continuous(
+      breaks = 1:5,
+      limits = c(0.8, 5.2)
+    ) +
+    scale_color_manual(
+      values = c(
+        "Immediate" = red,
+        "Strategic" = amber,
+        "Quick win" = teal,
+        "Monitor" = gray
+      )
+    ) +
+    labs(
+      x = "Percentage of respondents",
+      y = "Business impact",
+      title = "Frequency and impact of concerns"
+    ) +
+    theme(
+      legend.position = "none",
+      plot.margin = margin(15, 25, 15, 15)
+    ),
+  tooltip = "text"
+) |>
+  config(
+    displayModeBar = FALSE
+  )
+
 :root {
   --teal: #0b6f69; --teal-dark: #075653; --navy: #17324d;
   --blue: #2563a6; --gold: #a86108; --red: #a63a3a;
