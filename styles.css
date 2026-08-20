@@ -63,3 +63,82 @@ h3,
   font-weight: 700;
   letter-spacing: 0.06em;
 }
+
+:root {
+  --blue: #1F4E78;
+  --teal: #0F766E;
+  --dark-orange: #C65D00;
+
+  --light-blue: #EAF2F8;
+  --light-teal: #E8F5F3;
+  --light-orange: #FFF0E6;
+
+  --ink: #172033;
+  --muted: #5F6B7A;
+  --line: #D9E1E8;
+  --surface: #FFFFFF;
+  --canvas: #F5F7FA;
+
+  /* Compatibility with existing CSS */
+  --navy: var(--blue);
+  --teal-dark: #075653;
+  --gold: var(--dark-orange);
+  --red: #A84400;
+}
+
+
+
+
+.navbar {
+  background: var(--blue) !important;
+  border-bottom: 4px solid var(--teal) !important;
+}
+
+.navbar .nav-link.active {
+  background: var(--teal) !important;
+  color: #FFFFFF !important;
+}
+
+.kpi-blue {
+  border-top-color: var(--blue);
+}
+
+.kpi-teal {
+  border-top-color: var(--teal);
+}
+
+.kpi-gold {
+  border-top-color: var(--dark-orange);
+}
+
+.finding-item.strength {
+  background: var(--light-teal);
+  border-left-color: var(--teal);
+}
+
+.finding-item.concern {
+  background: var(--light-orange);
+  border-left-color: var(--dark-orange);
+}
+
+.quote-list blockquote {
+  background: var(--light-blue);
+  border-left-color: var(--blue);
+}
+
+table.dataTable thead th {
+  background: var(--blue) !important;
+  color: #FFFFFF !important;
+}
+
+
+
+
+blue <- "#1F4E78"
+teal <- "#0F766E"
+dark_orange <- "#C65D00"
+
+navy <- blue
+amber <- dark_orange
+red <- "#A84400"
+gray <- "#5F6B7A"
