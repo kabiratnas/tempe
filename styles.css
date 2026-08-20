@@ -1,1 +1,28 @@
 
+/* Use the full screen while maintaining consistent spacing */
+.navbar > .container-fluid,
+.navbar .navbar-container,
+.dashboard-page,
+.dashboard-content,
+#quarto-content {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding-left: clamp(24px, 3vw, 60px);
+  padding-right: clamp(24px, 3vw, 60px);
+}
+
+/* Keep tables and charts within their cards */
+.dataTables_wrapper,
+table.dataTable,
+.plotly,
+.plotly.html-widget,
+.html-widget {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Allow wide tables to scroll instead of breaking the layout */
+.dataTables_wrapper {
+  overflow-x: auto;
+}
