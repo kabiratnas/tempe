@@ -1,28 +1,65 @@
-
-/* Use the full screen while maintaining consistent spacing */
-.navbar > .container-fluid,
-.navbar .navbar-container,
+/* Professional dashboard typography */
+body,
 .dashboard-page,
-.dashboard-content,
-#quarto-content {
-  width: 100%;
-  max-width: none;
-  margin: 0;
-  padding-left: clamp(24px, 3vw, 60px);
-  padding-right: clamp(24px, 3vw, 60px);
-}
-
-/* Keep tables and charts within their cards */
+.card,
 .dataTables_wrapper,
-table.dataTable,
-.plotly,
-.plotly.html-widget,
-.html-widget {
-  width: 100% !important;
-  max-width: 100% !important;
+.plotly {
+  font-family: "Aptos", "Segoe UI", Arial, sans-serif;
+  font-size: 16px;
+  color: #172033;
 }
 
-/* Allow wide tables to scroll instead of breaking the layout */
-.dataTables_wrapper {
-  overflow-x: auto;
+/* Main dashboard title */
+.navbar-brand,
+.navbar-title {
+  font-family: "Aptos Display", "Segoe UI Semibold", Arial, sans-serif;
+  font-size: 1.25rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.01em;
+}
+
+/* Navigation labels */
+.navbar .nav-link {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+/* Page and card headings */
+h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+h3,
+.card-header {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+/* Dashboard body text */
+.card-body,
+.executive-summary,
+.decision-item,
+.quote-list {
+  font-size: 0.96rem;
+  line-height: 1.55;
+}
+
+/* KPI numbers */
+.kpi-card strong {
+  font-family: "Aptos Display", "Segoe UI Semibold", Arial, sans-serif;
+  font-size: 2.25rem;
+  font-weight: 700;
+}
+
+/* KPI labels */
+.kpi-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
 }
