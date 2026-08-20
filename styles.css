@@ -1,144 +1,67 @@
-/* Professional dashboard typography */
+/* Font-size adjustments */
 body,
 .dashboard-page,
-.card,
-.dataTables_wrapper,
-.plotly {
-  font-family: "Aptos", "Segoe UI", Arial, sans-serif;
-  font-size: 16px;
-  color: #172033;
+.card-body,
+.dataTables_wrapper {
+  font-size: 17px;
 }
 
-/* Main dashboard title */
+/* Dashboard title */
 .navbar-brand,
 .navbar-title {
-  font-family: "Aptos Display", "Segoe UI Semibold", Arial, sans-serif;
-  font-size: 1.25rem !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.01em;
+  font-size: 1.35rem !important;
+  font-weight: 700;
 }
 
-/* Navigation labels */
+/* Navigation: Overview, Priorities, Performance, etc. */
 .navbar .nav-link {
-  font-size: 0.95rem;
+  font-size: 1rem !important;
   font-weight: 600;
 }
 
-/* Page and card headings */
-h1 {
-  font-size: 1.75rem;
+/* Card headings */
+.card-header,
+h3 {
+  font-size: 1.15rem !important;
   font-weight: 700;
+}
+
+/* Page headings */
+h1 {
+  font-size: 1.8rem;
 }
 
 h2 {
-  font-size: 1.35rem;
-  font-weight: 700;
-}
-
-h3,
-.card-header {
-  font-size: 1.05rem;
-  font-weight: 700;
-}
-
-/* Dashboard body text */
-.card-body,
-.executive-summary,
-.decision-item,
-.quote-list {
-  font-size: 0.96rem;
-  line-height: 1.55;
+  font-size: 1.4rem;
 }
 
 /* KPI numbers */
 .kpi-card strong {
-  font-family: "Aptos Display", "Segoe UI Semibold", Arial, sans-serif;
-  font-size: 2.25rem;
-  font-weight: 700;
+  font-size: 2.4rem;
 }
 
 /* KPI labels */
 .kpi-label {
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  font-size: 0.85rem;
 }
 
-:root {
-  --blue: #1F4E78;
-  --teal: #0F766E;
-  --dark-orange: #C65D00;
-
-  --light-blue: #EAF2F8;
-  --light-teal: #E8F5F3;
-  --light-orange: #FFF0E6;
-
-  --ink: #172033;
-  --muted: #5F6B7A;
-  --line: #D9E1E8;
-  --surface: #FFFFFF;
-  --canvas: #F5F7FA;
-
-  /* Compatibility with existing CSS */
-  --navy: var(--blue);
-  --teal-dark: #075653;
-  --gold: var(--dark-orange);
-  --red: #A84400;
+/* Executive summary */
+.executive-summary {
+  font-size: 18px;
+  line-height: 1.65;
 }
 
-
-
-
-.navbar {
-  background: var(--blue) !important;
-  border-bottom: 4px solid var(--teal) !important;
-}
-
-.navbar .nav-link.active {
-  background: var(--teal) !important;
-  color: #FFFFFF !important;
-}
-
-.kpi-blue {
-  border-top-color: var(--blue);
-}
-
-.kpi-teal {
-  border-top-color: var(--teal);
-}
-
-.kpi-gold {
-  border-top-color: var(--dark-orange);
-}
-
-.finding-item.strength {
-  background: var(--light-teal);
-  border-left-color: var(--teal);
-}
-
-.finding-item.concern {
-  background: var(--light-orange);
-  border-left-color: var(--dark-orange);
-}
-
+/* Recommendations and comments */
+.decision-item,
 .quote-list blockquote {
-  background: var(--light-blue);
-  border-left-color: var(--blue);
+  font-size: 1rem;
+}
+
+/* Comments table */
+table.dataTable {
+  font-size: 0.95rem;
 }
 
 table.dataTable thead th {
-  background: var(--blue) !important;
-  color: #FFFFFF !important;
+  font-size: 1rem;
 }
-
-
-
-
-blue <- "#1F4E78"
-teal <- "#0F766E"
-dark_orange <- "#C65D00"
-
-navy <- blue
-amber <- dark_orange
-red <- "#A84400"
-gray <- "#5F6B7A"
